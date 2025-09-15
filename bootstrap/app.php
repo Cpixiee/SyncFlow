@@ -12,7 +12,8 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        //
+        // CORS will be handled by our custom middleware and response headers
+        // in the API controller or through the config/cors.php configuration
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

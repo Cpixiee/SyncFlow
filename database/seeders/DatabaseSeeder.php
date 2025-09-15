@@ -13,6 +13,9 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
+        // Seed login users for API authentication
+        $this->call(LoginUserSeeder::class);
+        
         // User::factory(10)->create();
 
         User::factory()->create([
