@@ -177,4 +177,75 @@ class AuthController extends Controller
             );
         }
     }
+
+    /**
+     * Create a new user.
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function createUser(Request $request): JsonResponse
+    {
+        // Validation
+        $validator = Validator::make($request->all(), [
+            'username' => 'required|string|unique:login_users,username',
+            'password' => 'required|string|min:6',
+            'role' => 'required|in:operator,admin,superadmin',
+            'photo_url' => 'nullable|string|url',
+            'employee_id' => 'required|string|unique:login_users,employee_id',
+            'phone' => 'required|string',
+            'email' => 'required|email|unique:login_users,email',
+            'position' => 'required|in:manager,staff,supervisor',
+            'department' => 'required|string',
+        ]);
+
+        if ($validator->fails()) {
+            return $this->validationErrorResponse(
+                $validator->errors(),
+                'Request invalid'
+            );
+        }
+
+        try {
+            // Create new user
+            $user = LoginUser::create([
+                'username' => $request->username,
+                'password' => Hash::make($request->password),
+                'role' => $request->role,
+                'photo_url' => $request->photo_url,
+                'employee_id' => $request->employee_id,
+                'phone' => $request->phone,
+                'email' => $request->email,
+                'position' => $request->position,
+                'department' => $request->department,
+            ]);
+
+            // Prepare user data for response (excluding password)
+            $userData = [
+                'id' => $user->id,
+                'username' => $user->username,
+                'role' => $user->role,
+                'photo_url' => $user->photo_url,
+                'employee_id' => $user->employee_id,
+                'phone' => $user->phone,
+                'email' => $user->email,
+                'position' => $user->position,
+                'department' => $user->department,
+                'created_at' => $user->created_at->format('Y-m-d H:i:s'),
+                'updated_at' => $user->updated_at->format('Y-m-d H:i:s'),
+            ];
+
+            return $this->successResponse(
+                $userData,
+                'User created successfully'
+            );
+
+        } catch (\Exception $e) {
+            return $this->errorResponse(
+                'Could not create user',
+                'USER_CREATE_ERROR',
+                500
+            );
+        }
+    }
 }

@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\V1\AuthController;
 Route::prefix('v1')->group(function () {
     // Public authentication routes
     Route::post('/login', [AuthController::class, 'login']);
+    Route::post('/create-user', [AuthController::class, 'createUser']);
     
     // Protected routes - require JWT authentication
     Route::middleware('auth:api')->group(function () {

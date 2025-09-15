@@ -1,10 +1,10 @@
-# Use PHP 8.3 with Apache
+# Use PHP 8.3 with Apache untuk optimasi Debian 11
 FROM php:8.3-apache
 
 # Set working directory
 WORKDIR /var/www/html
 
-# Install system dependencies
+# Install system dependencies untuk Debian 11
 RUN apt-get update && apt-get install -y \
     git \
     curl \
@@ -14,60 +14,70 @@ RUN apt-get update && apt-get install -y \
     zip \
     unzip \
     libzip-dev \
+    libfreetype6-dev \
+    libjpeg62-turbo-dev \
+    libmcrypt-dev \
+    libicu-dev \
+    default-mysql-client \
+    nano \
+    htop \
     && rm -rf /var/lib/apt/lists/*
 
-# Install PHP extensions
-RUN docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd zip
+# Install PHP extensions yang dibutuhkan
+RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && docker-php-ext-install -j$(nproc) \
+        pdo_mysql \
+        mbstring \
+        exif \
+        pcntl \
+        bcmath \
+        gd \
+        zip \
+        intl \
+        opcache
 
-# Enable Apache mod_rewrite
-RUN a2enmod rewrite
+# Enable Apache modules
+RUN a2enmod rewrite headers ssl expires
+
+# Configure PHP untuk production
+RUN echo "opcache.enable=1" >> /usr/local/etc/php/conf.d/opcache.ini \
+    && echo "opcache.memory_consumption=256" >> /usr/local/etc/php/conf.d/opcache.ini \
+    && echo "opcache.max_accelerated_files=20000" >> /usr/local/etc/php/conf.d/opcache.ini \
+    && echo "opcache.validate_timestamps=0" >> /usr/local/etc/php/conf.d/opcache.ini
 
 # Get latest Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
-# Copy existing application directory contents
+# Copy application files
 COPY . /var/www/html
 
-# Set permissions
-RUN chown -R www-data:www-data /var/www/html
-RUN chmod -R 755 /var/www/html/storage
-RUN chmod -R 755 /var/www/html/bootstrap/cache
+# Set proper permissions
+RUN chown -R www-data:www-data /var/www/html \
+    && chmod -R 755 /var/www/html/storage \
+    && chmod -R 755 /var/www/html/bootstrap/cache \
+    && chmod +x /var/www/html/artisan
 
-# Install dependencies
-RUN composer install --optimize-autoloader --no-dev
+# Install dependencies dengan cache optimization
+RUN composer install --optimize-autoloader --no-dev --no-scripts \
+    && composer dump-autoload --optimize
 
-# Configure Apache to serve Laravel
+# Configure Apache
 COPY docker/vhost.conf /etc/apache2/sites-available/000-default.conf
 
-# Generate application key if .env doesn't exist
-RUN if [ ! -f .env ]; then \
-        cp .env.example .env && \
-        php artisan key:generate; \
-    fi
+# Configure Apache untuk port 2020
+RUN sed -i 's/Listen 80/Listen 2020/' /etc/apache2/ports.conf \
+    && sed -i 's/:80>/:2020>/' /etc/apache2/sites-available/000-default.conf
 
-# Create JWT secret if not exists
-RUN php artisan jwt:secret --force
+# Create entrypoint script
+COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
 
-# Run migrations (optional, comment out if you want to run manually)
-# RUN php artisan migrate --force
-
-# Expose port 2020
+# Expose port
 EXPOSE 2020
 
-# Create startup script
-RUN echo '#!/bin/bash\n\
-# Wait for database connection\n\
-echo "Waiting for database..."\n\
-sleep 10\n\
-\n\
-# Run migrations\n\
-php artisan migrate --force\n\
-\n\
-# Start Apache on port 2020\n\
-sed -i "s/Listen 80/Listen 2020/g" /etc/apache2/ports.conf\n\
-sed -i "s/:80>/:2020>/g" /etc/apache2/sites-available/000-default.conf\n\
-apache2-foreground' > /usr/local/bin/start.sh
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:2020/up || exit 1
 
-RUN chmod +x /usr/local/bin/start.sh
-
-CMD ["/usr/local/bin/start.sh"]
+# Use entrypoint script
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
