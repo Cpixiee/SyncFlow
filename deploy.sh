@@ -72,6 +72,8 @@ echo -e "${YELLOW}📦 Checking dependencies...${NC}"
 if run_on_server "cd $SERVER_PATH && [ -f composer.lock ] && [ composer.lock -nt vendor/ ]"; then
     echo -e "${YELLOW}📦 Installing/Updating Composer dependencies...${NC}"
     run_on_server "cd $SERVER_PATH && docker exec $CONTAINER_NAME composer install --no-dev --optimize-autoloader"
+    # Clear composer cache and regenerate autoload after dependency changes
+    run_on_server "docker exec $CONTAINER_NAME composer dump-autoload --optimize"
 else
     echo -e "${GREEN}✅ Dependencies are up to date${NC}"
 fi
@@ -79,10 +81,11 @@ fi
 # Step 5: Run Laravel commands
 echo -e "${YELLOW}⚙️  Running Laravel commands...${NC}"
 
-# Clear caches
+# Clear caches and regenerate service providers discovery
 run_on_server "docker exec $CONTAINER_NAME php artisan config:clear"
 run_on_server "docker exec $CONTAINER_NAME php artisan cache:clear"
 run_on_server "docker exec $CONTAINER_NAME php artisan route:clear"
+run_on_server "docker exec $CONTAINER_NAME php artisan package:discover --ansi"
 
 # Run migrations (if any)
 echo -e "${YELLOW}🗃️  Running database migrations...${NC}"
