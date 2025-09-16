@@ -16,11 +16,14 @@ class DatabaseSeeder extends Seeder
         // Seed SuperAdmin for API authentication
         $this->call(SuperAdminSeeder::class);
         
-        // User::factory(10)->create();
+        // Only create test users in development environment
+        if (app()->environment(['local', 'testing'])) {
+            // User::factory(10)->create();
 
-        User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
-        ]);
+            User::factory()->create([
+                'name' => 'Test User',
+                'email' => 'test@example.com',
+            ]);
+        }
     }
 }

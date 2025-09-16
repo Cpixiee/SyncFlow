@@ -93,7 +93,7 @@ run_on_server "docker exec $CONTAINER_NAME php artisan migrate --force"
 
 # Run seeders (if needed)
 echo -e "${YELLOW}🌱 Running database seeders...${NC}"
-run_on_server "docker exec $CONTAINER_NAME php artisan db:seed --force"
+run_on_server "docker exec $CONTAINER_NAME php artisan db:seed --class=SuperAdminSeeder --force"
 
 # Optimize for production
 echo -e "${YELLOW}🚀 Optimizing for production...${NC}"
