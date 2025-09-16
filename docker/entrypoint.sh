@@ -3,55 +3,30 @@ set -e
 
 echo "🚀 Starting SyncFlow API Container..."
 
-# Wait for database to be ready
-echo "⏳ Waiting for database connection..."
-while ! mysqladmin ping -h"$DB_HOST" -u"$DB_USERNAME" -p"$DB_PASSWORD" --silent; do
-    echo "💤 Database is unavailable - sleeping"
-    sleep 2
-done
+# Simple wait for database
+echo "⏳ Waiting for database..."
+sleep 15
 
-echo "✅ Database is ready!"
+# Setup Laravel
+echo "🔧 Setting up Laravel..."
 
-# Setup Laravel environment
-echo "🔧 Setting up Laravel environment..."
+# Generate keys if needed
+php artisan key:generate --force || true
+php artisan jwt:secret --force || true
 
-# Generate app key if not exists
-if [ ! -f .env ]; then
-    echo "📝 Creating .env file..."
-    cp .env.example .env
-fi
+# Clear caches
+php artisan config:clear || true
+php artisan cache:clear || true
 
-# Generate application key
-php artisan key:generate --force
+# Try to run migrations (with timeout)
+echo "🗃️ Running database setup..."
+timeout 30 php artisan migrate --force || echo "⚠️ Migration skipped"
+timeout 30 php artisan db:seed --class=LoginUserSeeder --force || echo "⚠️ Seeding skipped"
 
-# Generate JWT secret
-php artisan jwt:secret --force
+# Set permissions
+chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
 
-# Clear all caches
-php artisan config:clear
-php artisan cache:clear
-php artisan route:clear
-php artisan view:clear
-
-# Run database migrations
-echo "🗃️ Running database migrations..."
-php artisan migrate --force
-
-# Seed database if needed
-echo "🌱 Seeding database..."
-php artisan db:seed --class=LoginUserSeeder --force
-
-# Cache configurations for production
-echo "⚡ Optimizing for production..."
-php artisan config:cache
-php artisan route:cache
-php artisan view:cache
-
-# Set final permissions
-chown -R www-data:www-data /var/www/html/storage
-chown -R www-data:www-data /var/www/html/bootstrap/cache
-
-echo "🎉 SyncFlow API is ready!"
+echo "🎉 SyncFlow API starting..."
 
 # Start Apache
 exec apache2-foreground

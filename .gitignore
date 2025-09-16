@@ -22,3 +22,13 @@
 Homestead.json
 Homestead.yaml
 Thumbs.db
+
+# Docker
+.dockerignore
+
+# Deployment scripts (keep local)
+deploy.sh
+quick-update.sh
+
+# Server specific files
+server-*.env

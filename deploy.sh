@@ -1,12 +1,12 @@
 #!/bin/bash
 
-# SyncFlow Deployment Script untuk Debian 11
-# Usage: ./deploy.sh
+# SyncFlow API - Automated Deployment Script
+# Script untuk update code ke server tanpa rebuild Docker
 
 set -e
 
-echo "🚀 SyncFlow Deployment Script"
-echo "================================"
+echo "🚀 SyncFlow API - Automated Deployment"
+echo "======================================"
 
 # Colors for output
 RED='\033[0;31m'
@@ -15,136 +15,117 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Function to print colored output
-print_status() {
-    echo -e "${GREEN}[INFO]${NC} $1"
+# Configuration
+SERVER_IP="103.236.140.19"
+SERVER_USER="root"
+SERVER_PATH="/root/SyncFlow"
+CONTAINER_NAME="syncflow-api"
+
+echo -e "${BLUE}📋 Deployment Configuration:${NC}"
+echo "Server: $SERVER_IP"
+echo "Path: $SERVER_PATH"
+echo "Container: $CONTAINER_NAME"
+echo ""
+
+# Function to run command on server
+run_on_server() {
+    ssh $SERVER_USER@$SERVER_IP "$1"
 }
 
-print_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
-}
-
-print_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
-}
-
-# Check if Docker is installed
-check_docker() {
-    if ! command -v docker &> /dev/null; then
-        print_error "Docker is not installed. Installing Docker..."
-        curl -fsSL https://get.docker.com -o get-docker.sh
-        sh get-docker.sh
-        usermod -aG docker $USER
-        print_status "Docker installed successfully"
+# Function to check if container is running
+check_container() {
+    if run_on_server "docker ps | grep -q $CONTAINER_NAME"; then
+        echo -e "${GREEN}✅ Container $CONTAINER_NAME is running${NC}"
+        return 0
     else
-        print_status "Docker is already installed"
+        echo -e "${RED}❌ Container $CONTAINER_NAME is not running${NC}"
+        return 1
     fi
 }
 
-# Check if Docker Compose is installed
-check_docker_compose() {
-    if ! command -v docker-compose &> /dev/null; then
-        print_error "Docker Compose is not installed. Installing..."
-        curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-        chmod +x /usr/local/bin/docker-compose
-        print_status "Docker Compose installed successfully"
-    else
-        print_status "Docker Compose is already installed"
+# Step 1: Check if server is accessible
+echo -e "${YELLOW}🔍 Checking server connection...${NC}"
+if ! ssh -o ConnectTimeout=10 $SERVER_USER@$SERVER_IP "echo 'Server connection OK'"; then
+    echo -e "${RED}❌ Cannot connect to server $SERVER_IP${NC}"
+    exit 1
+fi
+echo -e "${GREEN}✅ Server connection OK${NC}"
+
+# Step 2: Check if container is running
+echo -e "${YELLOW}🔍 Checking Docker container...${NC}"
+if ! check_container; then
+    echo -e "${YELLOW}⚠️  Container not running. Starting container...${NC}"
+    run_on_server "cd $SERVER_PATH && docker-compose up -d"
+    sleep 10
+    if ! check_container; then
+        echo -e "${RED}❌ Failed to start container${NC}"
+        exit 1
     fi
-}
+fi
 
-# Create required directories
-create_directories() {
-    print_status "Creating required directories..."
-    mkdir -p docker/mysql-init
-    mkdir -p storage/logs
-    chmod -R 755 storage/
-}
+# Step 3: Pull latest code from Git
+echo -e "${YELLOW}📥 Pulling latest code from Git...${NC}"
+run_on_server "cd $SERVER_PATH && git pull origin main"
 
-# Setup environment file
-setup_environment() {
-    if [ ! -f .env ]; then
-        print_status "Creating production environment file..."
-        cp .env.example .env
-        
-        # Update .env for production
-        sed -i 's/APP_ENV=local/APP_ENV=production/' .env
-        sed -i 's/APP_DEBUG=true/APP_DEBUG=false/' .env
-        sed -i 's/DB_CONNECTION=sqlite/DB_CONNECTION=mysql/' .env
-        sed -i 's/DB_HOST=127.0.0.1/DB_HOST=syncflow-db/' .env
-        sed -i 's/DB_DATABASE=laravel/DB_DATABASE=syncflow/' .env
-        sed -i 's/DB_USERNAME=root/DB_USERNAME=syncflow_user/' .env
-        sed -i 's/DB_PASSWORD=/DB_PASSWORD=SyncFlow2024#Secure/' .env
-        
-        print_status "Environment file created and configured"
-    else
-        print_warning ".env file already exists, skipping creation"
-    fi
-}
+# Step 4: Install/Update dependencies (only if composer.lock changed)
+echo -e "${YELLOW}📦 Checking dependencies...${NC}"
+if run_on_server "cd $SERVER_PATH && [ -f composer.lock ] && [ composer.lock -nt vendor/ ]"; then
+    echo -e "${YELLOW}📦 Installing/Updating Composer dependencies...${NC}"
+    run_on_server "cd $SERVER_PATH && docker exec $CONTAINER_NAME composer install --no-dev --optimize-autoloader"
+else
+    echo -e "${GREEN}✅ Dependencies are up to date${NC}"
+fi
 
-# Stop existing containers
-stop_containers() {
-    print_status "Stopping existing containers..."
-    docker-compose down --remove-orphans || true
-}
+# Step 5: Run Laravel commands
+echo -e "${YELLOW}⚙️  Running Laravel commands...${NC}"
 
-# Build and start containers
-start_containers() {
-    print_status "Building and starting containers..."
-    docker-compose up -d --build
-    
-    print_status "Waiting for services to be ready..."
-    sleep 30
-    
-    # Check container status
-    docker-compose ps
-}
+# Clear caches
+run_on_server "docker exec $CONTAINER_NAME php artisan config:clear"
+run_on_server "docker exec $CONTAINER_NAME php artisan cache:clear"
+run_on_server "docker exec $CONTAINER_NAME php artisan route:clear"
 
-# Show deployment info
-show_info() {
-    print_status "Deployment completed successfully! 🎉"
-    echo
-    echo -e "${BLUE}=== SyncFlow API URLs ===${NC}"
-    echo -e "🌐 API Endpoint: ${GREEN}http://$(hostname -I | awk '{print $1}'):2020${NC}"
-    echo -e "🌐 API Endpoint: ${GREEN}http://103.236.140.19:2020${NC}"
-    echo -e "🗄️  phpMyAdmin: ${GREEN}http://$(hostname -I | awk '{print $1}'):8081${NC}"
-    echo -e "🗄️  phpMyAdmin: ${GREEN}http://103.236.140.19:8081${NC}"
-    echo
-    echo -e "${BLUE}=== Database Connection Info ===${NC}"
-    echo -e "🔗 Host: localhost"
-    echo -e "🔗 Port: 33061"
-    echo -e "👤 Username: syncflow_user"
-    echo -e "🔑 Password: SyncFlow2024#Secure"
-    echo -e "🗃️  Database: syncflow"
-    echo
-    echo -e "${BLUE}=== Management Commands ===${NC}"
-    echo -e "📜 View logs: ${YELLOW}docker-compose logs -f${NC}"
-    echo -e "🔄 Restart: ${YELLOW}docker-compose restart${NC}"
-    echo -e "🛑 Stop: ${YELLOW}docker-compose down${NC}"
-    echo -e "🚀 Start: ${YELLOW}docker-compose up -d${NC}"
-    echo
-    echo -e "${GREEN}Happy coding! 🎯${NC}"
-}
+# Run migrations (if any)
+echo -e "${YELLOW}🗃️  Running database migrations...${NC}"
+run_on_server "docker exec $CONTAINER_NAME php artisan migrate --force"
 
-# Main deployment function
-main() {
-    print_status "Starting SyncFlow deployment on Debian 11..."
-    
-    # Check system requirements
-    check_docker
-    check_docker_compose
-    
-    # Setup project
-    create_directories
-    setup_environment
-    
-    # Deploy
-    stop_containers
-    start_containers
-    
-    # Show information
-    show_info
-}
+# Run seeders (if needed)
+echo -e "${YELLOW}🌱 Running database seeders...${NC}"
+run_on_server "docker exec $CONTAINER_NAME php artisan db:seed --force"
 
-# Run main function
-main "$@"
+# Optimize for production
+echo -e "${YELLOW}🚀 Optimizing for production...${NC}"
+run_on_server "docker exec $CONTAINER_NAME php artisan config:cache"
+run_on_server "docker exec $CONTAINER_NAME php artisan route:cache"
+
+# Set proper permissions
+run_on_server "docker exec $CONTAINER_NAME chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache"
+
+# Step 6: Restart container (optional - only if needed)
+echo -e "${YELLOW}🔄 Restarting container...${NC}"
+run_on_server "docker restart $CONTAINER_NAME"
+
+# Step 7: Health check
+echo -e "${YELLOW}🏥 Performing health check...${NC}"
+sleep 5
+
+if curl -f -s "http://$SERVER_IP:2020/api/v1/login" > /dev/null; then
+    echo -e "${GREEN}✅ API is responding correctly${NC}"
+else
+    echo -e "${YELLOW}⚠️  API health check failed, but deployment completed${NC}"
+fi
+
+# Step 8: Show deployment summary
+echo ""
+echo -e "${GREEN}🎉 Deployment completed successfully!${NC}"
+echo -e "${BLUE}📊 Deployment Summary:${NC}"
+echo "• Server: $SERVER_IP"
+echo "• API URL: http://$SERVER_IP:2020/api/v1"
+echo "• phpMyAdmin: http://$SERVER_IP:8081"
+echo "• Container: $CONTAINER_NAME"
+echo ""
+echo -e "${YELLOW}💡 Next steps:${NC}"
+echo "• Test API endpoints with Postman"
+echo "• Check logs: docker logs $CONTAINER_NAME"
+echo "• Monitor container: docker ps"
+echo ""
+echo -e "${GREEN}✨ Your team can now test the updated API!${NC}"

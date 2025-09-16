@@ -14,6 +14,12 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         // CORS will be handled by our custom middleware and response headers
         // in the API controller or through the config/cors.php configuration
+        
+        // Register custom middleware
+        $middleware->alias([
+            'role' => \App\Http\Middleware\CheckRole::class,
+            'api.auth' => \App\Http\Middleware\ApiAuthenticate::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

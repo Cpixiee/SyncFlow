@@ -20,8 +20,13 @@ services:
       - DB_PASSWORD=SyncFlow2024#Secure
       - JWT_SECRET=Bj20jXWknfvpWsadTnnVdr64MWdXXA3kwld1IdLKkvNNx4yHocGLuy13Fp3bTKTt
     volumes:
+      # Hot reload - code langsung sync ke container
+      - .:/var/www/html
       - ./storage/logs:/var/www/html/storage/logs
       - syncflow_storage:/var/www/html/storage
+      # Exclude node_modules dan vendor untuk performance
+      - /var/www/html/node_modules
+      - /var/www/html/vendor
     depends_on:
       syncflow-db:
         condition: service_healthy
@@ -100,4 +105,4 @@ networks:
     driver: bridge
     ipam:
       config:
-        - subnet: 172.20.0.0/16
+        - subnet: 172.25.0.0/16

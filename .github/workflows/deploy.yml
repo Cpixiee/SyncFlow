@@ -1,0 +1,40 @@
+name: Deploy SyncFlow API
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Deploy to Server
+      uses: appleboy/ssh-action@v0.1.5
+      with:
+        host: ${{ secrets.SERVER_HOST }}
+        username: ${{ secrets.SERVER_USER }}
+        key: ${{ secrets.SERVER_SSH_KEY }}
+        script: |
+          cd /root/SyncFlow
+          
+          # Pull latest code
+          git pull origin main
+          
+          # Update dependencies if needed
+          docker exec syncflow-api composer install --no-dev --optimize-autoloader
+          
+          # Run Laravel commands
+          docker exec syncflow-api php artisan config:clear
+          docker exec syncflow-api php artisan cache:clear
+          docker exec syncflow-api php artisan migrate --force
+          docker exec syncflow-api php artisan config:cache
+          
+          # Set permissions
+          docker exec syncflow-api chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
+          
+          # Restart container
+          docker restart syncflow-api
+          
+          echo "🚀 Deployment completed successfully!"

@@ -34,6 +34,8 @@ class LoginUser extends Authenticatable implements JWTSubject
         'email',
         'position',
         'department',
+        'password_changed',
+        'password_changed_at',
     ];
 
     /**
@@ -52,6 +54,8 @@ class LoginUser extends Authenticatable implements JWTSubject
      */
     protected $casts = [
         'password' => 'hashed',
+        'password_changed' => 'boolean',
+        'password_changed_at' => 'datetime',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];
@@ -120,5 +124,39 @@ class LoginUser extends Authenticatable implements JWTSubject
     public function isSuperAdmin()
     {
         return $this->role === 'superadmin';
+    }
+
+    /**
+     * Check if user must change password
+     *
+     * @return bool
+     */
+    public function mustChangePassword()
+    {
+        return !$this->password_changed;
+    }
+
+    /**
+     * Mark password as changed
+     *
+     * @return void
+     */
+    public function markPasswordChanged()
+    {
+        $this->update([
+            'password_changed' => true,
+            'password_changed_at' => now(),
+        ]);
+    }
+
+    /**
+     * Check if password is default password
+     *
+     * @param string $password
+     * @return bool
+     */
+    public function isDefaultPassword($password)
+    {
+        return $password === 'admin#1234';
     }
 }
