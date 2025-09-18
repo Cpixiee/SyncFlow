@@ -14,10 +14,13 @@ Route::prefix('v1')->group(function () {
         Route::post('/refresh', [AuthController::class, 'refresh']);
         Route::get('/me', [AuthController::class, 'me']);
         Route::post('/change-password', [AuthController::class, 'changePassword']);
+        Route::put('/update-user', [AuthController::class, 'updateUser']);
         
         // SuperAdmin only routes
         Route::middleware('role:superadmin')->group(function () {
             Route::post('/create-user', [AuthController::class, 'createUser']);
+            Route::get('/get-user-list', [AuthController::class, 'getUserList']);
+            Route::delete('/delete-users', [AuthController::class, 'deleteUsers']);
         });
     });
 });

@@ -14,22 +14,11 @@ class LoginUserSeeder extends Seeder
      */
     public function run(): void
     {
-        // Create test users for different roles
-        LoginUser::create([
-            'username' => 'superadmin',
-            'password' => Hash::make('password123'),
-            'role' => 'superadmin',
-            'photo_url' => 'https://example.com/photos/superadmin.jpg',
-            'employee_id' => 'EMP001',
-            'phone' => '+628123456789',
-            'email' => 'superadmin@syncflow.com',
-            'position' => 'manager',
-            'department' => 'IT',
-        ]);
-
+        // Create test users for different roles (skip superadmin as it's already created by SuperAdminSeeder)
+        
         LoginUser::create([
             'username' => 'admin',
-            'password' => Hash::make('password123'),
+            'password' => Hash::make('admin123'),
             'role' => 'admin',
             'photo_url' => 'https://example.com/photos/admin.jpg',
             'employee_id' => 'EMP002',
@@ -37,11 +26,13 @@ class LoginUserSeeder extends Seeder
             'email' => 'admin@syncflow.com',
             'position' => 'supervisor',
             'department' => 'IT',
+            'password_changed' => true,
+            'password_changed_at' => now(),
         ]);
 
         LoginUser::create([
             'username' => 'operator',
-            'password' => Hash::make('password123'),
+            'password' => Hash::make('admin123'),
             'role' => 'operator',
             'photo_url' => 'https://example.com/photos/operator.jpg',
             'employee_id' => 'EMP003',
@@ -49,11 +40,12 @@ class LoginUserSeeder extends Seeder
             'email' => 'operator@syncflow.com',
             'position' => 'staff',
             'department' => 'Operations',
+            'password_changed' => false, // Belum ganti password
         ]);
 
         LoginUser::create([
             'username' => 'wit urrohman',
-            'password' => Hash::make('password123'),
+            'password' => Hash::make('admin123'),
             'role' => 'operator',
             'photo_url' => 'https://example.com/photos/pixiee.jpg',
             'employee_id' => '101233948893',
@@ -61,6 +53,8 @@ class LoginUserSeeder extends Seeder
             'email' => 'salwit0109@gmail.com',
             'position' => 'manager',
             'department' => 'IT',
+            'password_changed' => true,
+            'password_changed_at' => now(),
         ]);
     }
 }
