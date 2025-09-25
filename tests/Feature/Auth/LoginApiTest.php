@@ -5,10 +5,11 @@ namespace Tests\Feature\Auth;
 use Tests\TestCase;
 use App\Models\LoginUser;
 use Illuminate\Support\Facades\Hash;
+use PHPUnit\Framework\Attributes\Test;
 
 class LoginApiTest extends TestCase
 {
-    /** @test */
+    #[Test]
     public function it_can_login_with_valid_credentials()
     {
         $user = LoginUser::factory()->create([
@@ -37,7 +38,7 @@ class LoginApiTest extends TestCase
         $this->assertArrayNotHasKey('password', $data);
     }
 
-    /** @test */
+    #[Test]
     public function it_returns_must_change_password_status_for_new_users()
     {
         $user = LoginUser::factory()->mustChangePassword()->create([
@@ -57,7 +58,7 @@ class LoginApiTest extends TestCase
         $this->assertNull($data['password_changed_at']);
     }
 
-    /** @test */
+    #[Test]
     public function it_returns_false_for_must_change_password_for_users_who_changed_password()
     {
         $user = LoginUser::factory()->passwordChanged()->create([
@@ -77,7 +78,7 @@ class LoginApiTest extends TestCase
         $this->assertNotNull($data['password_changed_at']);
     }
 
-    /** @test */
+    #[Test]
     public function it_rejects_login_with_invalid_credentials()
     {
         $user = LoginUser::factory()->create([
@@ -90,10 +91,10 @@ class LoginApiTest extends TestCase
             'password' => 'wrongpassword',
         ]);
 
-        $this->assertApiError($response, 401, 'Invalid credentials');
+        $this->assertApiError($response, 401, 'Invalid username or password');
     }
 
-    /** @test */
+    #[Test]
     public function it_rejects_login_with_nonexistent_user()
     {
         $response = $this->postJson('/api/v1/login', [
@@ -101,10 +102,10 @@ class LoginApiTest extends TestCase
             'password' => 'password123',
         ]);
 
-        $this->assertApiError($response, 401, 'Invalid credentials');
+        $this->assertApiError($response, 401, 'User not found');
     }
 
-    /** @test */
+    #[Test]
     public function it_validates_required_fields()
     {
         $response = $this->postJson('/api/v1/login', []);
@@ -116,7 +117,7 @@ class LoginApiTest extends TestCase
         $this->assertArrayHasKey('password', $errors);
     }
 
-    /** @test */
+    #[Test]
     public function it_validates_minimum_password_length()
     {
         $response = $this->postJson('/api/v1/login', [
@@ -130,7 +131,7 @@ class LoginApiTest extends TestCase
         $this->assertArrayHasKey('password', $errors);
     }
 
-    /** @test */
+    #[Test]
     public function it_can_login_operator_role()
     {
         $operator = LoginUser::factory()->operator()->create([
@@ -149,7 +150,7 @@ class LoginApiTest extends TestCase
         $this->assertEquals('operator', $data['role']);
     }
 
-    /** @test */
+    #[Test]
     public function it_can_login_admin_role()
     {
         $admin = LoginUser::factory()->admin()->create([
@@ -168,7 +169,7 @@ class LoginApiTest extends TestCase
         $this->assertEquals('admin', $data['role']);
     }
 
-    /** @test */
+    #[Test]
     public function it_can_login_superadmin_role()
     {
         $response = $this->postJson('/api/v1/login', [
@@ -182,7 +183,7 @@ class LoginApiTest extends TestCase
         $this->assertEquals('superadmin', $data['role']);
     }
 
-    /** @test */
+    #[Test]
     public function it_includes_all_required_user_data_in_response()
     {
         $user = LoginUser::factory()->create([

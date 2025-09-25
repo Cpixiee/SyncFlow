@@ -19,6 +19,12 @@ class DatabaseSeeder extends Seeder
         // Seed additional test users
         $this->call(LoginUserSeeder::class);
         
+        // Seed quarters
+        $this->call(QuarterSeeder::class);
+        
+        // Seed product categories
+        $this->call(ProductCategorySeeder::class);
+        
         // Only create test users in development environment
         if (app()->environment(['local', 'testing'])) {
             // User::factory(10)->create();

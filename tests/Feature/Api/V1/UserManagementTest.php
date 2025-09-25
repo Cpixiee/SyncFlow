@@ -81,9 +81,9 @@ class UserManagementTest extends TestCase
                 ->assertJsonStructure([
                     'http_code',
                     'message',
-                    'errorId',
+                    'error_id',
                     'data' => [
-                        'users' => [
+                        'docs' => [
                             '*' => [
                                 'id',
                                 'username',
@@ -100,11 +100,11 @@ class UserManagementTest extends TestCase
                                 'updated_at'
                             ]
                         ],
-                        'pagination' => [
+                        'metadata' => [
                             'current_page',
-                            'per_page',
-                            'total',
-                            'total_pages'
+                            'limit',
+                            'total_docs',
+                            'total_page'
                         ]
                     ]
                 ])
@@ -113,7 +113,7 @@ class UserManagementTest extends TestCase
                     'message' => 'Users retrieved successfully'
                 ]);
 
-        $this->assertGreaterThanOrEqual(3, $response->json('data.pagination.total'));
+        $this->assertGreaterThanOrEqual(3, $response->json('data.metadata.total_docs'));
     }
 
     /**
@@ -140,7 +140,7 @@ class UserManagementTest extends TestCase
         ])->getJson('/api/v1/get-user-list?search=admin');
 
         $response->assertStatus(200);
-        $users = $response->json('data.users');
+        $users = $response->json('data.docs');
         
         // Should find users with 'admin' in username
         $this->assertGreaterThanOrEqual(1, count($users));
@@ -166,7 +166,7 @@ class UserManagementTest extends TestCase
                 ->assertJsonStructure([
                     'http_code',
                     'message',
-                    'errorId',
+                    'error_id',
                     'data' => [
                         'user_id',
                         'username',
@@ -281,7 +281,7 @@ class UserManagementTest extends TestCase
                 ->assertJsonStructure([
                     'http_code',
                     'message',
-                    'errorId',
+                    'error_id',
                     'data' => [
                         'id',
                         'username',
@@ -357,7 +357,7 @@ class UserManagementTest extends TestCase
                 ->assertJsonStructure([
                     'http_code',
                     'message',
-                    'errorId',
+                    'error_id',
                     'data'
                 ]);
     }
@@ -391,7 +391,7 @@ class UserManagementTest extends TestCase
                 ->assertJsonStructure([
                     'http_code',
                     'message',
-                    'errorId',
+                    'error_id',
                     'data' => [
                         'deleted_count',
                         'deleted_users' => [
@@ -466,7 +466,7 @@ class UserManagementTest extends TestCase
                 ->assertJsonStructure([
                     'http_code',
                     'message', 
-                    'errorId',
+                    'error_id',
                     'data'
                 ]);
     }
@@ -507,7 +507,7 @@ class UserManagementTest extends TestCase
                 ->assertJsonStructure([
                     'http_code',
                     'message',
-                    'errorId', 
+                    'error_id', 
                     'data'
                 ]);
 
@@ -522,7 +522,7 @@ class UserManagementTest extends TestCase
                 ->assertJsonStructure([
                     'http_code',
                     'message',
-                    'errorId',
+                    'error_id',
                     'data'
                 ]);
 
@@ -537,7 +537,7 @@ class UserManagementTest extends TestCase
                 ->assertJsonStructure([
                     'http_code',
                     'message',
-                    'errorId',
+                    'error_id',
                     'data'
                 ]);
     }

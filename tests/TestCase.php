@@ -62,7 +62,7 @@ abstract class TestCase extends BaseTestCase
         $response->assertJsonStructure([
             'http_code',
             'message',
-            'errorId',
+            'error_id',
             'data',
         ]);
         
@@ -81,7 +81,7 @@ abstract class TestCase extends BaseTestCase
             $response->assertJson(['message' => $message]);
         }
         
-        $response->assertJson(['errorId' => null]);
+        $response->assertJson(['error_id' => null]);
     }
 
     /**
@@ -96,6 +96,6 @@ abstract class TestCase extends BaseTestCase
         }
         
         $responseData = $response->json();
-        $this->assertNotNull($responseData['errorId']);
+        $this->assertNotNull($responseData['error_id']);
     }
 }

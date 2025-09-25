@@ -54,8 +54,12 @@ class AuthController extends Controller
             // Attempt to verify the credentials and create a token for the user
             $user = LoginUser::where('username', $credentials['username'])->first();
 
-            if (!$user || !Hash::check($credentials['password'], $user->password)) {
-                return $this->unauthorizedResponse('Invalid credentials');
+            if (!$user) {
+                return $this->authErrorResponse('user_not_found');
+            }
+            
+            if (!Hash::check($credentials['password'], $user->password)) {
+                return $this->authErrorResponse('invalid_credentials');
             }
 
             // Create token
@@ -313,7 +317,8 @@ class AuthController extends Controller
                 if (!Hash::check($request->current_password, $targetUser->password)) {
                     return $this->validationErrorResponse(
                         ['current_password' => ['Current password is incorrect']],
-                        'Current password is incorrect'
+                        'Current password is incorrect',
+                        'PASSWORD_INCORRECT_' . strtoupper(uniqid())
                     );
                 }
             }
@@ -322,7 +327,8 @@ class AuthController extends Controller
             if (Hash::check($request->new_password, $targetUser->password)) {
                 return $this->validationErrorResponse(
                     ['new_password' => ['New password must be different from current password']],
-                    'New password must be different from current password'
+                    'New password must be different from current password',
+                    'PASSWORD_SAME_AS_CURRENT_' . strtoupper(uniqid())
                 );
             }
 
@@ -387,7 +393,7 @@ class AuthController extends Controller
 
             // Validation for query parameters
             $validator = Validator::make($request->all(), [
-                'per_page' => 'nullable|integer|min:1|max:100',
+                'limit' => 'nullable|integer|min:1|max:100',
                 'page' => 'nullable|integer|min:1',
                 'search' => 'nullable|string|max:255',
             ]);
@@ -399,7 +405,7 @@ class AuthController extends Controller
                 );
             }
 
-            $perPage = $request->get('per_page', 10);
+            $limit = $request->get('limit', 10);
             $search = $request->get('search');
 
             // Build query
@@ -414,7 +420,7 @@ class AuthController extends Controller
             }
 
             // Get paginated results
-            $users = $query->orderBy('created_at', 'desc')->paginate($perPage);
+            $users = $query->orderBy('created_at', 'desc')->paginate($limit);
 
             // Format user data
             $formattedUsers = $users->map(function($user) {
@@ -435,18 +441,14 @@ class AuthController extends Controller
                 ];
             });
 
-            $responseData = [
-                'users' => $formattedUsers,
-                'pagination' => [
+            return $this->paginationResponse(
+                $formattedUsers,
+                [
                     'current_page' => $users->currentPage(),
-                    'per_page' => $users->perPage(),
-                    'total' => $users->total(),
-                    'total_pages' => $users->lastPage(),
-                ]
-            ];
-
-            return $this->successResponse(
-                $responseData,
+                    'total_page' => $users->lastPage(),
+                    'limit' => $users->perPage(),
+                    'total_docs' => $users->total(),
+                ],
                 'Users retrieved successfully'
             );
 
