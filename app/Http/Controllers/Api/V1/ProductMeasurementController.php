@@ -617,7 +617,8 @@ class ProductMeasurementController extends Controller
                 }
             }
 
-            $itemDetails[] = [
+            // Enhanced evaluation details for different types
+            $evaluationDetails = [
                 'measurement_item' => $itemName,
                 'status' => $itemStatus,
                 'result' => $itemStatus ? 'OK' : 'NG',
@@ -625,6 +626,31 @@ class ProductMeasurementController extends Controller
                 'final_value' => $item['final_value'] ?? null,
                 'samples_summary' => $sampleResults
             ];
+
+            // Add specific details for JOINT evaluation
+            if (isset($item['joint_results']) && !empty($item['joint_results'])) {
+                $evaluationDetails['joint_evaluation'] = [
+                    'final_value' => $item['final_value'],
+                    'rule_evaluation' => [
+                        'result' => $itemStatus ? 'OK' : 'NG',
+                        'final_value' => $item['final_value'],
+                        'evaluation_method' => 'Final value checked against rule'
+                    ],
+                    'formula_steps' => $item['joint_results']
+                ];
+                
+                // Update sample summary for JOINT - show final result for all samples
+                $evaluationDetails['samples_summary'] = array_map(function($sample) use ($itemStatus, $item) {
+                    return [
+                        'sample_index' => $sample['sample_index'],
+                        'status' => $itemStatus,
+                        'result' => $itemStatus ? 'OK' : 'NG',
+                        'note' => 'Final value: ' . ($item['final_value'] ?? 'N/A') . ' → ' . ($itemStatus ? 'OK' : 'NG')
+                    ];
+                }, $sampleResults);
+            }
+
+            $itemDetails[] = $evaluationDetails;
         }
 
         return [
@@ -791,7 +817,7 @@ class ProductMeasurementController extends Controller
 
             // Enhanced response with detailed evaluation results
             $evaluationSummary = $this->generateEvaluationSummary($result['measurement_results']);
-            
+
             return $this->successResponse([
                 'status' => $result['overall_status'],
                 'overall_result' => $result['overall_status'] ? 'OK' : 'NG',

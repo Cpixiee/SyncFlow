@@ -5,6 +5,8 @@ use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\MeasurementController;
 use App\Http\Controllers\Api\V1\ProductController;
 use App\Http\Controllers\Api\V1\ProductMeasurementController;
+use App\Http\Controllers\Api\V1\ProductCategoryController;
+use App\Http\Controllers\Api\V1\MeasurementInstrumentController;
 
 // API Version 1 Routes
 Route::prefix('v1')->group(function () {
@@ -48,6 +50,18 @@ Route::prefix('v1')->group(function () {
 
         // Product Measurements List - for Monthly Target page
         Route::get('/product-measurements', [ProductMeasurementController::class, 'index']);
+
+        // Product Categories - available for authenticated users
+        Route::prefix('product-categories')->group(function () {
+            Route::get('/', [ProductCategoryController::class, 'index']);
+            Route::get('/{categoryId}/products', [ProductCategoryController::class, 'getProducts']);
+        });
+
+        // Measurement Instruments - available for authenticated users
+        Route::prefix('measurement-instruments')->group(function () {
+            Route::get('/', [MeasurementInstrumentController::class, 'index']);
+            Route::get('/{instrumentId}', [MeasurementInstrumentController::class, 'show']);
+        });
 
         // SuperAdmin only routes
         Route::middleware('role:superadmin')->group(function () {

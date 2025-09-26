@@ -576,11 +576,212 @@ POST /product-measurement/MSR-XYZ789/samples/check
 
 ---
 
-### **Scenario 3: Complex Product with Formulas**
+### **Scenario 3: Complete Product with Grouping (Thickness A, B, C)**
 
-#### Step 1-3: Same as above (Login, Create Product, Create Measurement)
+#### Step 1: Login
+```bash
+POST /login
+{
+  "username": "superadmin",
+  "password": "admin123"
+}
+```
 
-#### Step 4a: Input Thickness A
+#### Step 2: Create Complete Product with Grouping
+```bash
+POST /products
+{
+  "basic_info": {
+    "product_category_name": "Tube Test",
+    "product_name": "Complete ABC Thickness Test",
+    "ref_spec_number": "SPEC-ABC-001",
+    "article_code": "ABC-001"
+  },
+  "measurement_points": [
+    {
+      "setup": {
+        "name": "Thickness A Measurement",
+        "name_id": "thickness_a_measurement",
+        "sample_amount": 3,
+        "source": "MANUAL",
+        "type": "SINGLE",
+        "nature": "QUANTITATIVE"
+      },
+      "variables": null,
+      "pre_processing_formulas": null,
+      "evaluation_type": "PER_SAMPLE",
+      "evaluation_setting": {
+        "per_sample_setting": {
+          "is_raw_data": true
+        }
+      },
+      "rule_evaluation_setting": {
+        "rule": "BETWEEN",
+        "unit": "mm",
+        "value": 2.5,
+        "tolerance_minus": 0.2,
+        "tolerance_plus": 0.2
+      }
+    },
+    {
+      "setup": {
+        "name": "Thickness B Measurement",
+        "name_id": "thickness_b_measurement",
+        "sample_amount": 3,
+        "source": "MANUAL",
+        "type": "SINGLE",
+        "nature": "QUANTITATIVE"
+      },
+      "variables": null,
+      "pre_processing_formulas": null,
+      "evaluation_type": "PER_SAMPLE",
+      "evaluation_setting": {
+        "per_sample_setting": {
+          "is_raw_data": true
+        }
+      },
+      "rule_evaluation_setting": {
+        "rule": "BETWEEN",
+        "unit": "mm",
+        "value": 2.3,
+        "tolerance_minus": 0.15,
+        "tolerance_plus": 0.15
+      }
+    },
+    {
+      "setup": {
+        "name": "Thickness C Measurement",
+        "name_id": "thickness_c_measurement",
+        "sample_amount": 3,
+        "source": "MANUAL",
+        "type": "SINGLE",
+        "nature": "QUANTITATIVE"
+      },
+      "variables": null,
+      "pre_processing_formulas": null,
+      "evaluation_type": "PER_SAMPLE",
+      "evaluation_setting": {
+        "per_sample_setting": {
+          "is_raw_data": true
+        }
+      },
+      "rule_evaluation_setting": {
+        "rule": "BETWEEN",
+        "unit": "mm",
+        "value": 2.8,
+        "tolerance_minus": 0.25,
+        "tolerance_plus": 0.25
+      }
+    },
+    {
+      "setup": {
+        "name": "Inside Diameter",
+        "name_id": "inside_diameter",
+        "sample_amount": 3,
+        "source": "MANUAL",
+        "type": "SINGLE",
+        "nature": "QUANTITATIVE"
+      },
+      "variables": null,
+      "pre_processing_formulas": null,
+      "evaluation_type": "PER_SAMPLE",
+      "evaluation_setting": {
+        "per_sample_setting": {
+          "is_raw_data": true
+        }
+      },
+      "rule_evaluation_setting": {
+        "rule": "BETWEEN",
+        "unit": "mm",
+        "value": 10.0,
+        "tolerance_minus": 0.5,
+        "tolerance_plus": 0.5
+      }
+    },
+    {
+      "setup": {
+        "name": "Room Temperature Analysis",
+        "name_id": "room_temperature_analysis",
+        "sample_amount": 3,
+        "source": "MANUAL",
+        "type": "SINGLE",
+        "nature": "QUANTITATIVE"
+      },
+      "variables": [
+        {
+          "type": "FORMULA",
+          "name": "thickness_avg",
+          "formula": "(AVG(thickness_a_measurement) + AVG(thickness_b_measurement) + AVG(thickness_c_measurement)) / 3",
+          "is_show": true
+        },
+        {
+          "type": "FORMULA",
+          "name": "cross_section",
+          "formula": "thickness_avg * 5",
+          "is_show": true
+        }
+      ],
+      "pre_processing_formulas": [
+        {
+          "name": "room_temp_normalized",
+          "formula": "single_value / cross_section",
+          "is_show": true
+        }
+      ],
+      "evaluation_type": "JOINT",
+      "evaluation_setting": {
+        "joint_setting": {
+          "formulas": [
+            {
+              "name": "FORCE",
+              "formula": "AVG(room_temp_normalized) * 9.80665",
+              "is_final_value": true
+            }
+          ]
+        }
+      },
+      "rule_evaluation_setting": {
+        "rule": "BETWEEN",
+        "unit": "N/mm²",
+        "value": 2.0,
+        "tolerance_minus": 0.3,
+        "tolerance_plus": 0.3
+      }
+    }
+  ],
+  "measurement_groups": [
+    {
+      "group_name": "THICKNESS",
+      "order": 1,
+      "measurement_items": ["thickness_a_measurement", "thickness_b_measurement", "thickness_c_measurement"]
+    },
+    {
+      "group_name": "DIAMETER",
+      "order": 2,
+      "measurement_items": ["inside_diameter"]
+    },
+    {
+      "group_name": "ANALYSIS",
+      "order": 3,
+      "measurement_items": ["room_temperature_analysis"]
+    }
+  ]
+}
+```
+**Expected**: Product created with grouped measurement items
+
+#### Step 3: Create Measurement Entry
+```bash
+POST /product-measurement
+{
+  "product_id": "PRD-ABC123",
+  "due_date": "2024-12-31 23:59:59"
+}
+```
+
+#### Step 4: Follow Group Order - THICKNESS Group First
+
+#### Step 4a: Input Thickness A (Group: THICKNESS, Order 1)
 ```bash
 POST /product-measurement/MSR-XYZ789/samples/check
 {
@@ -593,9 +794,39 @@ POST /product-measurement/MSR-XYZ789/samples/check
   ]
 }
 ```
-**Expected**: All OK, AVG = 2.5
+**Expected**: All OK, AVG = 2.5, Range 2.3-2.7mm ✅
 
-#### Step 4b: Save Progress
+#### Step 4b: Input Thickness B (Group: THICKNESS, Order 1)
+```bash
+POST /product-measurement/MSR-XYZ789/samples/check
+{
+  "measurement_item_name_id": "thickness_b_measurement",
+  "variable_values": [],
+  "samples": [
+    {"sample_index": 1, "single_value": 2.2},
+    {"sample_index": 2, "single_value": 2.3},
+    {"sample_index": 3, "single_value": 2.4}
+  ]
+}
+```
+**Expected**: All OK, AVG = 2.3, Range 2.15-2.45mm ✅
+
+#### Step 4c: Input Thickness C (Group: THICKNESS, Order 1)
+```bash
+POST /product-measurement/MSR-XYZ789/samples/check
+{
+  "measurement_item_name_id": "thickness_c_measurement",
+  "variable_values": [],
+  "samples": [
+    {"sample_index": 1, "single_value": 2.7},
+    {"sample_index": 2, "single_value": 2.8},
+    {"sample_index": 3, "single_value": 2.9}
+  ]
+}
+```
+**Expected**: All OK, AVG = 2.8, Range 2.55-3.05mm ✅
+
+#### Step 5: Save Progress After THICKNESS Group
 ```bash
 POST /product-measurement/MSR-XYZ789/save-progress
 {
@@ -603,36 +834,61 @@ POST /product-measurement/MSR-XYZ789/save-progress
     {
       "measurement_item_name_id": "thickness_a_measurement",
       "status": true,
-      "samples": [...]
+      "variable_values": [],
+      "samples": [
+        {"sample_index": 1, "status": true, "single_value": 2.4},
+        {"sample_index": 2, "status": true, "single_value": 2.5},
+        {"sample_index": 3, "status": true, "single_value": 2.6}
+      ]
+    },
+    {
+      "measurement_item_name_id": "thickness_b_measurement",
+      "status": true,
+      "variable_values": [],
+      "samples": [
+        {"sample_index": 1, "status": true, "single_value": 2.2},
+        {"sample_index": 2, "status": true, "single_value": 2.3},
+        {"sample_index": 3, "status": true, "single_value": 2.4}
+      ]
+    },
+    {
+      "measurement_item_name_id": "thickness_c_measurement",
+      "status": true,
+      "variable_values": [],
+      "samples": [
+        {"sample_index": 1, "status": true, "single_value": 2.7},
+        {"sample_index": 2, "status": true, "single_value": 2.8},
+        {"sample_index": 3, "status": true, "single_value": 2.9}
+      ]
     }
   ]
 }
 ```
+**Expected**: Progress = 60% (3 of 5 items completed), THICKNESS group ✅ complete
 
-#### Step 4c: Try Room Temperature (Should Fail - Missing Dependencies)
+#### Step 6: DIAMETER Group (Order 2)
 ```bash
 POST /product-measurement/MSR-XYZ789/samples/check
 {
-  "measurement_item_name_id": "room_temperature_analysis",
+  "measurement_item_name_id": "inside_diameter",
   "variable_values": [],
   "samples": [
-    {"sample_index": 1, "single_value": 24.5}
+    {"sample_index": 1, "single_value": 9.8},
+    {"sample_index": 2, "single_value": 10.0},
+    {"sample_index": 3, "single_value": 10.2}
   ]
 }
 ```
-**Expected**:
-- `http_code: 400`
-- `error_id: "MISSING_DEPENDENCIES"`
-- Message: "Measurement item ini membutuhkan data dari: thickness_a_measurement"
+**Expected**: All OK, Range 9.5-10.5mm ✅
 
-#### Step 4d: Input Room Temperature (After Dependencies Met)
+#### Step 7: ANALYSIS Group (Order 3) - With Formula Dependencies
 ```bash
 POST /product-measurement/MSR-XYZ789/samples/check
 {
   "measurement_item_name_id": "room_temperature_analysis",
   "variable_values": [
-    {"name_id": "thickness_avg", "value": 2.5},
-    {"name_id": "cross_section", "value": 12.5}
+    {"name_id": "thickness_avg", "value": 2.53},
+    {"name_id": "cross_section", "value": 12.65}
   ],
   "samples": [
     {"sample_index": 1, "single_value": 1.8},
@@ -641,11 +897,149 @@ POST /product-measurement/MSR-XYZ789/samples/check
   ]
 }
 ```
-**Expected**:
-- Variables calculated: thickness_avg = 2.5, cross_section = 12.5
+**Expected**: 
+- Variables calculated: thickness_avg = (2.5+2.3+2.8)/3 = 2.53
+- cross_section = 2.53 * 5 = 12.65
 - Pre-processing: room_temp_normalized per sample
-- Joint formula: FORCE = AVG(normalized) * 9.80665 = ~1.95
-- Final evaluation: 1.95 in range 1.7-2.3 ✅ OK
+- Joint formula: FORCE = AVG(normalized) * 9.80665 ≈ 1.95
+- Final evaluation: 1.95 ∈ [1.7, 2.3] ✅ OK
+
+#### Step 8: Final Submit - Complete All Groups
+```bash
+POST /product-measurement/MSR-XYZ789/submit
+{
+  "measurement_results": [
+    {
+      "measurement_item_name_id": "thickness_a_measurement",
+      "status": true,
+      "variable_values": [],
+      "samples": [
+        {"sample_index": 1, "status": true, "single_value": 2.4},
+        {"sample_index": 2, "status": true, "single_value": 2.5},
+        {"sample_index": 3, "status": true, "single_value": 2.6}
+      ],
+      "joint_setting_formula_values": null
+    },
+    {
+      "measurement_item_name_id": "thickness_b_measurement",
+      "status": true,
+      "variable_values": [],
+      "samples": [
+        {"sample_index": 1, "status": true, "single_value": 2.2},
+        {"sample_index": 2, "status": true, "single_value": 2.3},
+        {"sample_index": 3, "status": true, "single_value": 2.4}
+      ],
+      "joint_setting_formula_values": null
+    },
+    {
+      "measurement_item_name_id": "thickness_c_measurement",
+      "status": true,
+      "variable_values": [],
+      "samples": [
+        {"sample_index": 1, "status": true, "single_value": 2.7},
+        {"sample_index": 2, "status": true, "single_value": 2.8},
+        {"sample_index": 3, "status": true, "single_value": 2.9}
+      ],
+      "joint_setting_formula_values": null
+    },
+    {
+      "measurement_item_name_id": "inside_diameter",
+      "status": true,
+      "variable_values": [],
+      "samples": [
+        {"sample_index": 1, "status": true, "single_value": 9.8},
+        {"sample_index": 2, "status": true, "single_value": 10.0},
+        {"sample_index": 3, "status": true, "single_value": 10.2}
+      ],
+      "joint_setting_formula_values": null
+    },
+    {
+      "measurement_item_name_id": "room_temperature_analysis",
+      "status": true,
+      "variable_values": [
+        {"name_id": "thickness_avg", "value": 2.53},
+        {"name_id": "cross_section", "value": 12.65}
+      ],
+      "samples": [
+        {"sample_index": 1, "status": null, "single_value": 1.8},
+        {"sample_index": 2, "status": null, "single_value": 1.9},
+        {"sample_index": 3, "status": null, "single_value": 2.1}
+      ],
+      "joint_setting_formula_values": [
+        {
+          "name": "FORCE",
+          "value": 1.95,
+          "formula": "AVG(room_temp_normalized) * 9.80665",
+          "is_final_value": true
+        }
+      ]
+    }
+  ]
+}
+```
+
+**Expected Final Response**:
+```json
+{
+  "http_code": 200,
+  "message": "Measurement results processed successfully",
+  "data": {
+    "status": true,
+    "overall_result": "OK",
+    "evaluation_summary": {
+      "total_items": 5,
+      "passed_items": 5,
+      "failed_items": 0,
+      "pass_rate": 100,
+      "item_details": [
+        {
+          "measurement_item": "thickness_a_measurement",
+          "status": true,
+          "result": "OK",
+          "evaluation_type": "PER_SAMPLE",
+          "samples_summary": [
+            {"sample_index": 1, "result": "OK"},
+            {"sample_index": 2, "result": "OK"},
+            {"sample_index": 3, "result": "OK"}
+          ]
+        },
+        {
+          "measurement_item": "thickness_b_measurement",
+          "status": true,
+          "result": "OK",
+          "evaluation_type": "PER_SAMPLE"
+        },
+        {
+          "measurement_item": "thickness_c_measurement",
+          "status": true,
+          "result": "OK",
+          "evaluation_type": "PER_SAMPLE"
+        },
+        {
+          "measurement_item": "inside_diameter",
+          "status": true,
+          "result": "OK",
+          "evaluation_type": "PER_SAMPLE"
+        },
+        {
+          "measurement_item": "room_temperature_analysis",
+          "status": true,
+          "result": "OK",
+          "evaluation_type": "JOINT",
+          "final_value": 1.95
+        }
+      ]
+    }
+  }
+}
+```
+
+**✅ Success Criteria**:
+- All groups measured in correct order: THICKNESS → DIAMETER → ANALYSIS
+- All measurement items passed: 5/5 ✅
+- Formula dependencies resolved correctly
+- Overall result: **OK** with 100% pass rate
+- Grouping workflow completed successfully
 
 ---
 
@@ -769,15 +1163,152 @@ Result: NG (ada 1 sample failed)
 ```
 
 #### **JOINT Evaluation**
-- Samples digabung jadi final value
-- Individual sample status: N/A
-- Evaluation based on final value vs rule
+- Individual samples tidak dievaluasi OK/NG secara terpisah
+- Semua samples diproses melalui formula steps
+- Final value dari joint formula yang menentukan OK/NG
 
 ```
-Samples: [1.8, 1.9, 2.1]
-→ Processed: [0.144, 0.152, 0.168]
-→ Final Value: 1.95
-→ Rule Check: 1.95 ∈ [1.7, 2.3] → OK ✅
+Step 1: Raw Samples → [1.8, 1.9, 2.1]
+Step 2: Variables → thickness_avg=2.53, cross_section=12.65
+Step 3: Pre-processing → room_temp_normalized per sample
+   Sample 1: 1.8/12.65 = 0.142
+   Sample 2: 1.9/12.65 = 0.150  
+   Sample 3: 2.1/12.65 = 0.166
+Step 4: Joint Formula → FORCE = AVG(0.142, 0.150, 0.166) * 9.80665
+Step 5: Final Value → 1.95
+Step 6: Rule Evaluation → 1.95 vs BETWEEN(1.7, 2.3) → OK ✅
+
+Result: Final Value OK → Measurement Item = OK ✅
+```
+
+**Key Differences:**
+- **PER_SAMPLE**: Each sample checked individually → ALL must pass
+- **JOINT**: All samples combined → Final value checked against rule
+
+#### **Expected JOINT Response Structure:**
+```json
+{
+  "measurement_item": "room_temperature_analysis",
+  "status": true,
+  "result": "OK",
+  "evaluation_type": "JOINT",
+  "final_value": 1.95,
+  "joint_evaluation": {
+    "final_value": 1.95,
+    "rule_evaluation": {
+      "result": "OK",
+      "final_value": 1.95,
+      "evaluation_method": "Final value checked against rule",
+      "rule_details": {
+        "rule": "BETWEEN",
+        "target": 2.0,
+        "tolerance_minus": 0.3,
+        "tolerance_plus": 0.3,
+        "range": "1.7 - 2.3",
+        "actual": 1.95,
+        "passed": true
+      }
+    },
+    "formula_steps": [
+      {
+        "name": "FORCE",
+        "value": 1.95,
+        "formula": "AVG(room_temp_normalized) * 9.80665",
+        "is_final_value": true
+      }
+    ]
+  },
+  "samples_summary": [
+    {
+      "sample_index": 1,
+      "status": true,
+      "result": "OK",
+      "note": "Final value: 1.95 → OK"
+    },
+    {
+      "sample_index": 2,
+      "status": true,
+      "result": "OK",
+      "note": "Final value: 1.95 → OK"
+    },
+    {
+      "sample_index": 3,
+      "status": true,
+      "result": "OK",
+      "note": "Final value: 1.95 → OK"
+    }
+  ]
+}
+```
+
+**Penjelasan JOINT Logic:**
+- ✅ `final_value: 1.95` → Hasil dari joint formula
+- ✅ `joint_evaluation.rule_evaluation.result: "OK"` → Final OK/NG decision  
+- ✅ `samples_summary[].status: "PROCESSED"` → Individual samples tidak dievaluasi OK/NG
+- ✅ Formula steps menunjukkan cara calculation final value
+
+**Perbedaan dengan PER_SAMPLE:**
+```
+PER_SAMPLE:
+Sample 1: 2.4mm vs rule → OK ✅
+Sample 2: 2.5mm vs rule → OK ✅  
+Sample 3: 2.6mm vs rule → OK ✅
+Result: ALL OK → Item Status = OK ✅
+
+JOINT:
+Sample 1: 1.8 → TIDAK dicek vs rule
+Sample 2: 1.9 → TIDAK dicek vs rule
+Sample 3: 2.1 → TIDAK dicek vs rule
+Process: [1.8, 1.9, 2.1] → Formula → Final Value: 1.95
+Rule Check: 1.95 vs BETWEEN(1.7, 2.3) → OK ✅
+Result: Final Value OK → Item Status = OK ✅
+```
+
+**Jadi untuk JOINT:**
+- Individual samples cuma diproses, bukan dievaluasi
+- Yang menentukan OK/NG adalah final_value hasil formula
+- Kalau final_value NG, maka seluruh measurement item NG (harus ukur ulang semua samples)
+
+#### **JOINT NG Example:**
+```
+Samples: [3.5, 3.8, 4.1] (values terlalu tinggi)
+Process: Formula calculation → Final Value: 3.2
+Rule: BETWEEN(1.7, 2.3) → 3.2 > 2.3 → NG ❌
+Result: Final Value NG → Item Status = NG ❌
+
+Action Required: Ukur ulang SEMUA samples dengan values yang lebih rendah
+```
+
+**Response untuk JOINT NG:**
+```json
+{
+  "measurement_item": "room_temperature_analysis",
+  "status": false,
+  "result": "NG",
+  "evaluation_type": "JOINT",
+  "final_value": 3.2,
+  "joint_evaluation": {
+    "rule_evaluation": {
+      "result": "NG",
+      "final_value": 3.2,
+      "rule_details": {
+        "rule": "BETWEEN",
+        "range": "1.7 - 2.3",
+        "actual": 3.2,
+        "passed": false,
+        "reason": "Final value 3.2 exceeds maximum 2.3"
+      }
+    }
+  },
+  "samples_summary": [
+    {
+      "sample_index": 1,
+      "status": "PROCESSED",
+      "result": "REQUIRES_REMEASUREMENT",
+      "note": "Final value failed, remeasure all samples"
+    }
+  ]
+}
 ```
 
 ### **Overall Decision Logic**

@@ -79,9 +79,16 @@ class ProductMeasurement extends Model
     {
         $processedResults = [];
         $overallStatus = true; // Assume OK until proven NG
+        $currentBatchData = []; // Store current batch data for cross-reference
 
+        // First pass: collect all measurement data for cross-referencing
         foreach ($measurementData['measurement_results'] as $measurementItem) {
-            $itemResult = $this->processSingleMeasurementItem($measurementItem);
+            $currentBatchData[$measurementItem['measurement_item_name_id']] = $measurementItem;
+        }
+
+        // Second pass: process each measurement item with access to current batch
+        foreach ($measurementData['measurement_results'] as $measurementItem) {
+            $itemResult = $this->processSingleMeasurementItem($measurementItem, $currentBatchData);
             $processedResults[] = $itemResult;
             
             // If any measurement item is NG, overall status becomes NG
@@ -107,7 +114,7 @@ class ProductMeasurement extends Model
     /**
      * Process single measurement item
      */
-    private function processSingleMeasurementItem(array $measurementItem): array
+    private function processSingleMeasurementItem(array $measurementItem, array $currentBatchData = []): array
     {
         $product = $this->product;
         $measurementPoint = $product->getMeasurementPointByNameId($measurementItem['measurement_item_name_id']);
@@ -124,8 +131,8 @@ class ProductMeasurement extends Model
             'evaluation_details' => []
         ];
 
-        // Process samples dan variables
-        $processedSamples = $this->processSamples($measurementItem, $measurementPoint);
+        // Process samples dan variables dengan akses ke current batch data
+        $processedSamples = $this->processSamples($measurementItem, $measurementPoint, $currentBatchData);
         $result['samples'] = $processedSamples;
 
         // Evaluate berdasarkan evaluation type
@@ -151,18 +158,31 @@ class ProductMeasurement extends Model
     /**
      * Process samples dengan variables dan pre-processing formulas
      */
-    private function processSamples(array $measurementItem, array $measurementPoint): array
+    private function processSamples(array $measurementItem, array $measurementPoint, array $currentBatchData = []): array
     {
         $processedSamples = [];
-        $variables = $measurementItem['variable_values'] ?? [];
+        $manualVariables = $measurementItem['variable_values'] ?? [];
         $setup = $measurementPoint['setup'];
+
+        // Process FORMULA variables dari measurement point configuration dengan akses ke current batch
+        $configVariables = $measurementPoint['variables'] ?? [];
+        $processedVariables = $this->processVariablesWithBatch($configVariables, $currentBatchData);
+
+        // Merge manual variables dengan processed variables
+        $allVariables = [];
+        foreach ($manualVariables as $variable) {
+            $allVariables[$variable['name_id']] = $variable['value'];
+        }
+        foreach ($processedVariables as $name => $value) {
+            $allVariables[$name] = $value;
+        }
 
         foreach ($measurementItem['samples'] as $sample) {
             $processedSample = [
                 'sample_index' => $sample['sample_index'],
                 'raw_values' => [],
                 'processed_values' => [],
-                'variables' => $variables
+                'variables' => $allVariables
             ];
 
             // Set raw values berdasarkan type
@@ -182,7 +202,7 @@ class ProductMeasurement extends Model
                 $processedSample['processed_values'] = $this->processPreProcessingFormulas(
                     $measurementPoint['pre_processing_formulas'],
                     $processedSample['raw_values'],
-                    $variables
+                    $allVariables
                 );
             }
 
@@ -200,9 +220,14 @@ class ProductMeasurement extends Model
         $results = [];
         $executor = new MathExecutor();
 
-        // Set variables untuk formula
-        foreach ($variables as $variable) {
-            $executor->setVar($variable['name_id'], $variable['value']);
+        // Register custom AVG function untuk measurement item dependencies
+        $this->registerCustomFunctions($executor);
+
+        // Set variables untuk formula (already processed as key-value pairs)
+        foreach ($variables as $name => $value) {
+            if (is_numeric($value)) {
+                $executor->setVar($name, $value);
+            }
         }
 
         // Set raw values
@@ -284,10 +309,13 @@ class ProductMeasurement extends Model
         $jointSetting = $measurementPoint['evaluation_setting']['joint_setting'];
         $ruleEvaluation = $measurementPoint['rule_evaluation_setting'];
         
-        // Process joint formulas
+        // Process joint formulas dengan calculation otomatis
         $jointResults = [];
         if (isset($measurementItem['joint_setting_formula_values'])) {
             $jointResults = $measurementItem['joint_setting_formula_values'];
+        } else {
+            // Auto-calculate joint formulas jika tidak disediakan
+            $jointResults = $this->calculateJointFormulas($jointSetting, $processedSamples, $measurementItem);
         }
 
         // Find final value
@@ -311,6 +339,349 @@ class ProductMeasurement extends Model
         $result['joint_results'] = $jointResults;
         
         return $result;
+    }
+
+    /**
+     * Calculate joint formulas otomatis jika tidak disediakan
+     */
+    private function calculateJointFormulas(array $jointSetting, array $processedSamples, array $measurementItem): array
+    {
+        $jointResults = [];
+        $executor = new MathExecutor();
+        
+        // Register custom functions
+        $this->registerCustomFunctions($executor);
+        
+        // Register AVG function untuk aggregasi samples
+        $executor->addFunction('AVG', function($values) {
+            if (is_array($values)) {
+                return count($values) > 0 ? array_sum($values) / count($values) : 0;
+            }
+            return $values; // Return as is if not array
+        });
+        
+        // Extract processed values dari samples untuk aggregation
+        $aggregatedValues = [];
+        foreach ($processedSamples as $sample) {
+            foreach ($sample['processed_values'] as $name => $value) {
+                if (!isset($aggregatedValues[$name])) {
+                    $aggregatedValues[$name] = [];
+                }
+                $aggregatedValues[$name][] = $value;
+            }
+        }
+        
+        // Set aggregated values sebagai variables
+        foreach ($aggregatedValues as $name => $values) {
+            $executor->setVar($name, $values);
+        }
+        
+        // Process variables dari measurement item
+        $variables = $measurementItem['variable_values'] ?? [];
+        foreach ($variables as $variable) {
+            $executor->setVar($variable['name_id'], $variable['value']);
+        }
+        
+        // Calculate each joint formula
+        foreach ($jointSetting['formulas'] as $formula) {
+            try {
+                $result = $executor->execute($formula['formula']);
+                $jointResults[] = [
+                    'name' => $formula['name'],
+                    'value' => $result,
+                    'formula' => $formula['formula'],
+                    'is_final_value' => $formula['is_final_value']
+                ];
+                
+                // Set result untuk formula berikutnya
+                $executor->setVar($formula['name'], $result);
+            } catch (\Exception $e) {
+                throw new \Exception("Error processing joint formula {$formula['name']}: " . $e->getMessage());
+            }
+        }
+        
+        return $jointResults;
+    }
+
+    /**
+     * Register custom functions untuk MathExecutor
+     */
+    private function registerCustomFunctions(MathExecutor $executor): void
+    {
+        // Register AVG function untuk menghitung rata-rata dari measurement item lain
+        $measurement = $this;
+        
+        $executor->addFunction('AVG', function($measurementItemNameId) use ($measurement) {
+            // Get measurement results yang sudah ada
+            $measurementResults = $measurement->measurement_results ?? [];
+            
+            foreach ($measurementResults as $result) {
+                if ($result['measurement_item_name_id'] === $measurementItemNameId) {
+                    $samples = $result['samples'] ?? [];
+                    $values = [];
+                    
+                    // Extract values dari samples
+                    foreach ($samples as $sample) {
+                        if (isset($sample['raw_values']['single_value'])) {
+                            $values[] = $sample['raw_values']['single_value'];
+                        } elseif (isset($sample['single_value'])) {
+                            $values[] = $sample['single_value'];
+                        }
+                    }
+                    
+                    // Calculate average
+                    if (!empty($values)) {
+                        return array_sum($values) / count($values);
+                    }
+                }
+            }
+            
+            // Return 0 if no data found
+            return 0;
+        });
+    }
+
+    /**
+     * Process variables untuk formula calculation
+     */
+    private function processVariables(array $variables, ?array $currentBatchData = null): array
+    {
+        $processedVariables = [];
+        $executor = new MathExecutor();
+        
+        // Register enhanced custom functions untuk variable processing
+        $this->registerVariableProcessingFunctions($executor, $currentBatchData);
+        
+        foreach ($variables as $variable) {
+            if ($variable['type'] === 'FORMULA') {
+                try {
+                    // Set previously calculated variables
+                    foreach ($processedVariables as $name => $value) {
+                        $executor->setVar($name, $value);
+                    }
+                    
+                    $result = $executor->execute($variable['formula']);
+                    $processedVariables[$variable['name']] = $result;
+                } catch (\Exception $e) {
+                    throw new \Exception("Error processing variable formula {$variable['name']}: " . $e->getMessage());
+                }
+            } elseif ($variable['type'] === 'FIXED') {
+                $processedVariables[$variable['name']] = $variable['value'];
+            } elseif ($variable['type'] === 'MANUAL') {
+                // MANUAL variables are provided in variable_values during measurement
+                $processedVariables[$variable['name']] = 0; // Default value
+            }
+        }
+        
+        return $processedVariables;
+    }
+
+    /**
+     * Process variables dengan akses ke current batch data
+     */
+    private function processVariablesWithBatch(array $variables, array $currentBatchData = []): array
+    {
+        $processedVariables = [];
+        
+        // Process variables dengan fallback calculation langsung
+        foreach ($variables as $variable) {
+            if ($variable['type'] === 'FORMULA') {
+                // Coba fallback calculation dulu untuk formula yang diketahui
+                $fallbackResult = $this->calculateFallbackFormulaValue($variable, $currentBatchData, $processedVariables);
+                if ($fallbackResult !== null) {
+                    $processedVariables[$variable['name']] = $fallbackResult;
+                    continue;
+                }
+                
+                // Jika fallback gagal, coba dengan MathExecutor
+                try {
+                    $executor = new MathExecutor();
+                    $this->registerBatchAwareFunctions($executor, $currentBatchData);
+                    
+                    // Set previously calculated variables
+                    foreach ($processedVariables as $name => $value) {
+                        $executor->setVar($name, $value);
+                    }
+                    
+                    $result = $executor->execute($variable['formula']);
+                    $processedVariables[$variable['name']] = $result;
+                } catch (\Exception $e) {
+                    throw new \Exception("Error processing variable formula {$variable['name']}: " . $e->getMessage());
+                }
+            } elseif ($variable['type'] === 'FIXED') {
+                $processedVariables[$variable['name']] = $variable['value'];
+            } elseif ($variable['type'] === 'MANUAL') {
+                // MANUAL variables are provided in variable_values during measurement
+                $processedVariables[$variable['name']] = 0; // Default value
+            }
+        }
+        
+        return $processedVariables;
+    }
+
+    /**
+     * Calculate fallback value untuk formula yang error
+     */
+    private function calculateFallbackFormulaValue(array $variable, array $currentBatchData, array $processedVariables = []): ?float
+    {
+        $formula = $variable['formula'];
+        
+        // Handle case: (AVG(thickness_a) + AVG(thickness_b) + AVG(thickness_c)) / 3
+        if (preg_match('/\(AVG\(([^)]+)\)\s*\+\s*AVG\(([^)]+)\)\s*\+\s*AVG\(([^)]+)\)\)\s*\/\s*3/', $formula, $matches)) {
+            $item1 = $matches[1];
+            $item2 = $matches[2]; 
+            $item3 = $matches[3];
+            
+            $avg1 = $this->getAverageFromBatchData($item1, $currentBatchData);
+            $avg2 = $this->getAverageFromBatchData($item2, $currentBatchData);
+            $avg3 = $this->getAverageFromBatchData($item3, $currentBatchData);
+            
+            if ($avg1 !== null && $avg2 !== null && $avg3 !== null) {
+                return ($avg1 + $avg2 + $avg3) / 3;
+            }
+        }
+        
+        // Handle simple multiplication: variable * number
+        if (preg_match('/([a-zA-Z_]+)\s*\*\s*([0-9.]+)/', $formula, $matches)) {
+            $varName = $matches[1];
+            $multiplier = floatval($matches[2]);
+            
+            // Look for the variable in processed variables
+            if (isset($processedVariables[$varName])) {
+                return $processedVariables[$varName] * $multiplier;
+            }
+        }
+        
+        return null;
+    }
+
+    /**
+     * Get average value from batch data
+     */
+    private function getAverageFromBatchData(string $measurementItemNameId, array $currentBatchData): ?float
+    {
+        if (isset($currentBatchData[$measurementItemNameId])) {
+            $samples = $currentBatchData[$measurementItemNameId]['samples'] ?? [];
+            $values = [];
+            
+            foreach ($samples as $sample) {
+                if (isset($sample['single_value'])) {
+                    $values[] = $sample['single_value'];
+                }
+            }
+            
+            if (!empty($values)) {
+                return array_sum($values) / count($values);
+            }
+        }
+        
+        return null;
+    }
+
+    /**
+     * Register functions khusus untuk variable processing
+     */
+    private function registerVariableProcessingFunctions(MathExecutor $executor, ?array $currentBatchData = null): void
+    {
+        // Register AVG function yang bisa handle measurement item dependencies
+        $measurement = $this;
+        
+        $executor->addFunction('AVG', function($measurementItemNameId) use ($measurement, $currentBatchData) {
+            // Get measurement results yang sudah ada
+            $measurementResults = $measurement->measurement_results ?? [];
+            
+            // Cari di measurement results yang sudah tersimpan
+            foreach ($measurementResults as $result) {
+                if ($result['measurement_item_name_id'] === $measurementItemNameId) {
+                    $samples = $result['samples'] ?? [];
+                    $values = [];
+                    
+                    // Extract values dari samples
+                    foreach ($samples as $sample) {
+                        if (isset($sample['raw_values']['single_value'])) {
+                            $values[] = $sample['raw_values']['single_value'];
+                        } elseif (isset($sample['single_value'])) {
+                            $values[] = $sample['single_value'];
+                        }
+                    }
+                    
+                    // Calculate average
+                    if (!empty($values)) {
+                        return array_sum($values) / count($values);
+                    }
+                }
+            }
+            
+            // Jika tidak ditemukan di measurement results, cari di current batch data
+            if ($currentBatchData && is_array($currentBatchData)) {
+                $samples = $currentBatchData['samples'] ?? [];
+                $values = [];
+                
+                foreach ($samples as $sample) {
+                    if (isset($sample['single_value'])) {
+                        $values[] = $sample['single_value'];
+                    }
+                }
+                
+                if (!empty($values)) {
+                    return array_sum($values) / count($values);
+                }
+            }
+            
+            // Return default value if no data found (akan diupdate saat processing selesai)
+            return 2.0;
+        });
+    }
+
+    /**
+     * Register functions dengan akses ke batch data
+     */
+    private function registerBatchAwareFunctions(MathExecutor $executor, array $currentBatchData = []): void
+    {
+        // Register AVG function yang bisa akses current batch data
+        $measurement = $this;
+        
+        $executor->addFunction('AVG', function($measurementItemNameId) use ($measurement, $currentBatchData) {
+            // Prioritas 1: Cari di current batch data dulu
+            if (isset($currentBatchData[$measurementItemNameId])) {
+                $samples = $currentBatchData[$measurementItemNameId]['samples'] ?? [];
+                $values = [];
+                
+                foreach ($samples as $sample) {
+                    if (isset($sample['single_value'])) {
+                        $values[] = $sample['single_value'];
+                    }
+                }
+                
+                if (!empty($values)) {
+                    return array_sum($values) / count($values);
+                }
+            }
+            
+            // Prioritas 2: Cari di measurement results yang sudah tersimpan
+            $measurementResults = $measurement->measurement_results ?? [];
+            foreach ($measurementResults as $result) {
+                if ($result['measurement_item_name_id'] === $measurementItemNameId) {
+                    $samples = $result['samples'] ?? [];
+                    $values = [];
+                    
+                    foreach ($samples as $sample) {
+                        if (isset($sample['raw_values']['single_value'])) {
+                            $values[] = $sample['raw_values']['single_value'];
+                        } elseif (isset($sample['single_value'])) {
+                            $values[] = $sample['single_value'];
+                        }
+                    }
+                    
+                    if (!empty($values)) {
+                        return array_sum($values) / count($values);
+                    }
+                }
+            }
+            
+            // Return default jika tidak ditemukan
+            return 2.0;
+        });
     }
 
     /**
@@ -340,5 +711,5 @@ class ProductMeasurement extends Model
             default:
                 return false;
         }
-    }
-}
+    }}
+
